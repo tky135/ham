@@ -100,13 +100,13 @@ class HAMERWrapper(GenericWrapper):
         keypoints_2d = targets['mano.j2d.norm.r'].cpu()
         keypoints_2d = (keypoints_2d + 1) * self.args.img_res / 2
         keypoints_2d = keypoints_2d[0]
-        # keypoints_2d = (keypoints_2d + 0.5) * 224
         keypoints_2d = torch.cat([keypoints_2d, torch.ones(keypoints_2d.shape[0], 1)], dim=-1)
         keypoints_2d = keypoints_2d.cpu().numpy()
         keypoints_2d = keypoints_2d[mano_to_openpose]
         output_img = render_hand_keypoints(img, keypoints_2d)
         cv2.imwrite(f"__test__/{img_idx_str}_2dj.png", output_img[:, :, ::-1])
         
+        # plot 3d keypoints with image
         K = meta_info['intrinsics'].cpu()[0]
         keypoints_3d = targets['mano.j3d.cam.r'].cpu()
         keypoints_3d = keypoints_3d[0]
@@ -117,6 +117,19 @@ class HAMERWrapper(GenericWrapper):
         proj_keypoints_3d = proj_keypoints_3d.numpy()[mano_to_openpose]
         output_img = render_hand_keypoints(img, proj_keypoints_3d)
         cv2.imwrite(f"__test__/{img_idx_str}_3dj.png", output_img[:, :, ::-1])
+        
+        
+        # plot mano parameters with image
+        K = meta_info['intrinsics'].cpu()[0]
+        keypoints_3d_mano = targets['mano.j3d.model.r'].cpu()
+        keypoints_3d_mano = keypoints_3d_mano[0]
+        proj_keypoints_3d_mano = torch.matmul(K, keypoints_3d_mano.t()).t()
+        proj_keypoints_3d_mano = proj_keypoints_3d_mano[:, :2] / proj_keypoints_3d_mano[:, 2:]
+        proj_keypoints_3d_mano = torch.cat([proj_keypoints_3d_mano, torch.ones(proj_keypoints_3d_mano.shape[0], 1)], dim=-1)
+        proj_keypoints_3d_mano = proj_keypoints_3d_mano.numpy()[mano_to_openpose]
+        output_img = render_hand_keypoints(img, proj_keypoints_3d_mano)
+        cv2.imwrite(f"__test__/{img_idx_str}_3dj_mano_param.png", output_img[:, :, ::-1])
+        
         import ipdb ; ipdb.set_trace()
         
         
