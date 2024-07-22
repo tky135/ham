@@ -5,17 +5,18 @@ from arctic.src.callbacks.process.process_arctic import process_data_light
 from arctic.src.callbacks.vis.visualize_arctic import visualize_all
 from arctic.src.models.hamer_local.model import HAMER
 from arctic.src.models.generic.wrapper import GenericWrapper
-
+import cv2
 # from generic wrapper
 import numpy as np
 import torch
-
+import os
 import arctic.common.data_utils as data_utils
 import arctic.common.ld_utils as ld_utils
 from arctic.common.body_models import MANODecimator
 from arctic.common.xdict import xdict
+from arctic.common.data_utils import unormalize_kp2d
 from copy import deepcopy
-
+from hamer.utils.render_openpose import render_hand_keypoints
 
 def mul_loss_dict(loss_dict):
     for key, val in loss_dict.items():
@@ -77,6 +78,54 @@ class HAMERWrapper(GenericWrapper):
             # inputs_og, targets_og, meta_info_og = process_data(
             #     models, inputs_og, targets_og, meta_info_og, mode, self.args
             # )
+        
+        ### visualization to test input data
+        
+        # prepare for visualization
+        if not os.path.exists('__test__'):
+            os.makedirs('__test__')
+        img_idx_str = meta_info['imgname'][0].split('/')[-1].split('.')[0]
+        mano_to_openpose = [0, 13, 14, 15, 16, 1, 2, 3, 17, 4, 5, 6, 18, 10, 11, 12, 19, 7, 8, 9, 20]
+
+        # plot image
+        img = inputs['img'][0].cpu()
+        img = img * torch.tensor([0.229, 0.224, 0.225]).reshape(3,1,1)
+        img = img + torch.tensor([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+        img = img * 255
+        img = img.type(torch.uint8)
+        img = img.numpy().transpose(1, 2, 0)
+        cv2.imwrite(f"__test__/{img_idx_str}.png", img[:,:,::-1])
+
+        # plot 2d keypoints with image
+        keypoints_2d = targets['mano.j2d.norm.r'].cpu()
+        keypoints_2d = (keypoints_2d + 1) * self.args.img_res / 2
+        keypoints_2d = keypoints_2d[0]
+        # keypoints_2d = (keypoints_2d + 0.5) * 224
+        keypoints_2d = torch.cat([keypoints_2d, torch.ones(keypoints_2d.shape[0], 1)], dim=-1)
+        keypoints_2d = keypoints_2d.cpu().numpy()
+        keypoints_2d = keypoints_2d[mano_to_openpose]
+        output_img = render_hand_keypoints(img, keypoints_2d)
+        cv2.imwrite(f"__test__/{img_idx_str}_2dj.png", output_img[:, :, ::-1])
+        
+        K = meta_info['intrinsics'].cpu()[0]
+        keypoints_3d = targets['mano.j3d.cam.r'].cpu()
+        keypoints_3d = keypoints_3d[0]
+        
+        proj_keypoints_3d = torch.matmul(K, keypoints_3d.t()).t()
+        proj_keypoints_3d = proj_keypoints_3d[:, :2] / proj_keypoints_3d[:, 2:]
+        proj_keypoints_3d = torch.cat([proj_keypoints_3d, torch.ones(proj_keypoints_3d.shape[0], 1)], dim=-1)
+        proj_keypoints_3d = proj_keypoints_3d.numpy()[mano_to_openpose]
+        output_img = render_hand_keypoints(img, proj_keypoints_3d)
+        cv2.imwrite(f"__test__/{img_idx_str}_3dj.png", output_img[:, :, ::-1])
+        import ipdb ; ipdb.set_trace()
+        
+        
+        
+        
+        
+        
+        
+        
 
         # move_keys = ["object.v_len"]
         # for key in move_keys:
