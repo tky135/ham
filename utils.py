@@ -324,12 +324,44 @@ def load_tars_as_webdataset(cfg: CfgNode, urls: str|List[str], train: bool,
         """
         dict_keys(['img', 'mask', 'img_full', 'box_center_full', 'box_size_full', 'K_crop', 'K', 'K_rescale', 'K_crop_rescale', 'keypoints_2d', 'keypoints_3d', 'orig_keypoints_2d', 'box_center', 'box_size', 'img_size', 'mano_params', 'has_mano_params', 'mano_params_is_axis_angle', '_scale', '_trans', 'imgname', 'right', 'focal_length', 'pos_emb', '__key__'])
         """
+        openpose_to_mano = [0, 5, 6, 7, 9, 10, 11, 17, 18, 19, 13, 14, 15, 1, 2, 3, 4, 8, 12, 16, 20]
+        inputs, targets, meta_info = {}, {}, {}
         img = item['img']
+        img_size = img.shape[-1]
         keypoints_2d = item['keypoints_2d']
         keypoints_3d = item['keypoints_3d']
         mano_params = item['mano_params']
         imgname = item['imgname']
         pos_emb = item['pos_emb']
+        K = item['K_crop_rescale']
+        
+        global_orient, pose, beta = mano_params['global_orient'], mano_params['hand_pose'], mano_params['betas']
+        
+        keypoints_2d[:, :2] = (keypoints_2d[:, :2] + 0.5) * img_size
+        keypoints_2d[:, :2] = 2.0 * keypoints_2d[:, :2] / img_size - 1.0
+        
+        targets['mano.j2d.norm.r'] = keypoints_2d[openpose_to_mano,:2]
+        targets['mano.j3d.full.r'] = keypoints_3d[openpose_to_mano,:3]
+        # import ipdb ; ipdb.set_trace()
+        # print(keypoints_3d)
+        meta_info['intrinsics'] = K
+        meta_info['imgname'] = imgname
+        targets['mano.pose.r'] = np.concatenate([global_orient, pose])
+        
+        
+        # the pose mean from hamer's freihand dataset does not take into account the pose mean
+        pose_mean = np.array([ 0.0000,  0.0000,  0.0000,  0.1117, -0.0429,  0.4164,  0.1088,  0.0660,
+         0.7562, -0.0964,  0.0909,  0.1885, -0.1181, -0.0509,  0.5296, -0.1437,
+        -0.0552,  0.7049, -0.0192,  0.0923,  0.3379, -0.4570,  0.1963,  0.6255,
+        -0.2147,  0.0660,  0.5069, -0.3697,  0.0603,  0.0795, -0.1419,  0.0859,
+         0.6355, -0.3033,  0.0579,  0.6314, -0.1761,  0.1321,  0.3734,  0.8510,
+        -0.2769,  0.0915, -0.4998, -0.0266, -0.0529,  0.5356, -0.0460,  0.2774])
+        targets['mano.pose.r'] -= pose_mean
+        
+        targets['mano.beta.r'] = beta
+        inputs['img'] = img
+        return inputs, targets, meta_info
+
         
     # Load the dataset
     # if epoch_size is not None:

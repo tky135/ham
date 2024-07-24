@@ -17,6 +17,8 @@ from arctic.common.xdict import xdict
 from arctic.common.data_utils import unormalize_kp2d
 from copy import deepcopy
 from hamer.utils.render_openpose import render_hand_keypoints
+from smplx import MANO
+from hamer.models.mano_wrapper import MANO_wrapper
 
 def mul_loss_dict(loss_dict):
     for key, val in loss_dict.items():
@@ -55,6 +57,22 @@ class HAMERWrapper(GenericWrapper):
         return super().inference_pose(inputs, meta_info)
 
     def forward(self, inputs, targets, meta_info, mode):
+        # self.mano_r = MANO(
+        # model_path='./data/body_models/mano',
+        # use_pca=False,
+        # create_global_orient=False,
+        # create_hand_pose=False,
+        # create_betas=False,
+        # create_transl=False,
+        # ).cuda()
+        self.mano_r = MANO_wrapper().cuda()
+    #     self.mano_r = MANO(
+    #     './data/body_models/mano',
+    #     create_transl=False,
+    #     use_pca=False,
+    #     flat_hand_mean=False,
+    #     is_rhand=True,
+    # )
         models = {
             "mano_r": self.mano_r,
             "mano_l": self.mano_l,
@@ -98,7 +116,7 @@ class HAMERWrapper(GenericWrapper):
 
         # plot 2d keypoints with image
         keypoints_2d = targets['mano.j2d.norm.r'].cpu()
-        keypoints_2d = (keypoints_2d + 1) * self.args.img_res / 2
+        keypoints_2d = (keypoints_2d + 1) * img.shape[0] / 2
         keypoints_2d = keypoints_2d[0]
         keypoints_2d = torch.cat([keypoints_2d, torch.ones(keypoints_2d.shape[0], 1)], dim=-1)
         keypoints_2d = keypoints_2d.cpu().numpy()
@@ -110,8 +128,8 @@ class HAMERWrapper(GenericWrapper):
         K = meta_info['intrinsics'].cpu()[0]
         keypoints_3d = targets['mano.j3d.cam.r'].cpu()
         keypoints_3d = keypoints_3d[0]
-        
-        proj_keypoints_3d = torch.matmul(K, keypoints_3d.t()).t()
+
+        proj_keypoints_3d = keypoints_3d @ K.T
         proj_keypoints_3d = proj_keypoints_3d[:, :2] / proj_keypoints_3d[:, 2:]
         proj_keypoints_3d = torch.cat([proj_keypoints_3d, torch.ones(proj_keypoints_3d.shape[0], 1)], dim=-1)
         proj_keypoints_3d = proj_keypoints_3d.numpy()[mano_to_openpose]
@@ -130,8 +148,11 @@ class HAMERWrapper(GenericWrapper):
         output_img = render_hand_keypoints(img, proj_keypoints_3d_mano)
         cv2.imwrite(f"__test__/{img_idx_str}_3dj_mano_param.png", output_img[:, :, ::-1])
         
+        with open(f"__test__/{img_idx_str}_K.txt", 'w') as f:
+            f.write(str(K))
+            
+            
         import ipdb ; ipdb.set_trace()
-        
         
         
         
